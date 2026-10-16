@@ -1,8 +1,8 @@
 # SignBridge
 
-Real-Time Sign Language Interpreter & Learning Companion — static web app.
+Real-Time Sign Language Interpreter & Learning Companion — static web app (PWA-ready).
 
-This repository contains a single-page static web app that uses MediaPipe Hands to detect hand landmarks and a simple heuristic classifier to demo ASL-like signs. It's intended for local testing and static hosting.
+This repository contains a single-page static web app that uses MediaPipe Hands to detect hand landmarks and a simple heuristic classifier to demo ASL-like signs. The project has been updated to be installable as a Progressive Web App (PWA).
 
 ## Quick start (no build tools)
 
@@ -36,11 +36,16 @@ This repository contains a single-page static web app that uses MediaPipe Hands 
 
 3. Open the site in Chrome/Edge/Firefox at http://localhost:8080 and allow camera access.
 
-## Notes
+## Install as PWA
+
+- When opened in a supported browser (Chrome/Edge on desktop or Android), you should see an "Install" option in the address bar or in the browser menu. Install will add SignBridge to your device and run it like a native app.
+- The app uses a simple service worker to cache core assets so the shell can load offline.
+
+## Notes & privacy
 
 - MediaPipe and browser APIs require a secure context (HTTPS) or `localhost` to access camera and microphone.
-- The current sign classifier is a small heuristic for demo purposes only — not a production-grade model.
-- This static version does not send any camera frames to a server; all processing is client-side.
+- The sign classifier is a heuristic demo — not production-grade. For better accuracy use a trained model.
+- This static version does not send camera frames anywhere; all processing is done client-side in the browser.
 
 ## Deployment
 
@@ -49,4 +54,4 @@ This repository contains a single-page static web app that uses MediaPipe Hands 
 
 ## License
 
-MIT — see LICENSE file.
+MIT

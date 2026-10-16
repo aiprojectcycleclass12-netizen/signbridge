@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Real-Time Sign Language Interpreter & Learning Companion</title>
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#4f46e5">
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts Inter -->
@@ -459,7 +461,7 @@
                         <span class="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-lg">+50 XP</span>
                     </div>
 
-                    <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800">
+                    <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200/60 dark;border-slate-800">
                         <div class="flex items-center space-x-3">
                             <div class="w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 flex items-center justify-center text-sm">
                                 <i class="fa-solid fa-video"></i>
@@ -507,7 +509,7 @@
             </div>
 
             <div class="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex space-x-2">
-                <input type="text" id="tutor-input" onkeypress="handleTutorKey(event)" placeholder="Ask about ASL, signs, or tips..." class="flex-grow bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <input type="text" id="tutor-input" onkeypress="handleTutorKey(event)" placeholder="Ask about ASL, signs, or tips..." class="flex-grow bg-white dark:bg-slate-900 border border-slate-200 dark;border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
                 <button onclick="sendTutorMessage()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition">
                     <i class="fa-solid fa-paper-plane"></i>
                 </button>
@@ -625,7 +627,7 @@
                 document.getElementById('ai-model-status').innerHTML = `
                     <span class="w-2 h-2 rounded-full bg-emerald-500 mr-2"></span>MediaPipe Model Ready
                 `;
-                document.getElementById('ai-model-status').className = "inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700/50";
+                document.getElementById('ai-model-status').className = "inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300 dark;border-emerald-700/50";
             } catch (e) {
                 console.error("MediaPipe initialization error:", e);
                 document.getElementById('ai-model-status').innerHTML = `
@@ -825,7 +827,7 @@
         function renderDictionary(data) {
             const grid = document.getElementById('dictionary-grid');
             grid.innerHTML = data.map(item => `
-                <div class="glass-card rounded-2xl p-4 text-center shadow-sm border border-slate-200 dark:border-slate-800 hover:border-indigo-500 transition group flex flex-col items-center justify-between">
+                <div class="glass-card rounded-2xl p-4 text-center shadow-sm border border-slate-200 dark;border-slate-800 hover;border-indigo-500 transition group flex flex-col items-center justify-between">
                     <div>
                         <div class="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xl mx-auto mb-3 group-hover:scale-110 transition shadow-sm">
                             <i class="${item.icon}"></i>
@@ -890,7 +892,7 @@
 
             const optionsGrid = document.getElementById('quiz-options');
             optionsGrid.innerHTML = q.options.map(opt => `
-                <button onclick="submitQuizAnswer('${opt}', '${q.target}')" class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-center font-bold text-lg transition shadow-sm">
+                <button onclick="submitQuizAnswer('${opt}', '${q.target}')" class="p-4 rounded-xl border border-slate-200 dark;border-slate-700 hover;border-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-center font-bold text-lg transition shadow-sm">
                     ${opt}
                 </button>
             `).join('');
@@ -972,6 +974,17 @@
                 chatBox.scrollTop = chatBox.scrollHeight;
             }, 600);
         }
+    </script>
+
+    <!-- Register Service Worker for PWA -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('Service Worker registered:', reg))
+            .catch(err => console.warn('Service Worker registration failed:', err));
+        });
+      }
     </script>
 </body>
 </html>
