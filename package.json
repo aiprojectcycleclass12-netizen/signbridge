@@ -1,0 +1,12 @@
+{
+  "name": "signbridge",
+  "version": "0.1.0",
+  "description": "Static demo: Real-Time Sign Language Interpreter & Learning Companion",
+  "scripts": {
+    "dev": "npx http-server -p 8080",
+    "start": "npx http-server -p 8080"
+  },
+  "keywords": [],
+  "author": "aiprojectcycleclass12-netizen",
+  "license": "MIT"
+}

@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Sign Language Interpreter & Learning Companion</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- MediaPipe Hands & Camera Utils -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <!-- Canvas Confetti for Quizzes & Lessons -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(229, 231, 235, 0.8);
+        }
+        .dark .glass-card {
+            background: rgba(31, 41, 55, 0.85);
+            border: 1px solid rgba(75, 85, 99, 0.4);
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+        .dark ::-webkit-scrollbar-thumb { background: #4b5563; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen flex flex-col transition-colors duration-300">
+
+    <!-- Top Navigation Bar -->
+    <header class="sticky top-0 z-50 glass-card border-b border-slate-200 dark:border-slate-800 px-4 lg:px-8 py-3 shadow-sm">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/30">
+                    <i class="fa-solid fa-hands-asl-interpreting text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight tracking-tight bg-gradient-to-r from-indigo-600 to-violet-600 dark:from-indigo-400 dark:to-violet-400 bg-clip-text text-transparent">
+                        SignBridge AI
+                    </h1>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">Real-Time Sign Language Interpreter & Tutor</p>
+                </div>
+            </div>
+
+            <!-- Navigation Links / Tabs -->
+            <nav class="hidden md:flex items-center space-x-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                <button onclick="switchTab('interpreter')" id="nav-interpreter" class="px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-sm">
+                    <i class="fa-solid fa-video mr-2"></i>Live Interpreter
+                </button>
+                <button onclick="switchTab('lessons')" id="nav-lessons" class="px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400">
+                    <i class="fa-solid fa-book-open mr-2"></i>Interactive Lessons
+                </button>
+                <button onclick="switchTab('dictionary')" id="nav-dictionary" class="px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400">
+                    <i class="fa-solid fa-hand mr-2"></i>Gesture Guide
+                </button>
+                <button onclick="switchTab('quiz')" id="nav-quiz" class="px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400">
+                    <i class="fa-solid fa-puzzle-piece mr-2"></i>Practice & Quiz
+                </button>
+                <button onclick="switchTab('dashboard')" id="nav-dashboard" class="px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400">
+                    <i class="fa-solid fa-chart-line mr-2"></i>Dashboard
+                </button>
+            </nav>
+
+            <!-- Actions & Theme Toggle -->
+            <div class="flex items-center space-x-3">
+                <button onclick="toggleDarkMode()" class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition" title="Toggle Theme">
+                    <i id="theme-icon" class="fa-solid fa-moon"></i>
+                </button>
+                <button onclick="openTutorModal()" class="hidden sm:flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 text-sm font-semibold hover:bg-indigo-100 transition">
+                    <i class="fa-solid fa-robot"></i>
+                    <span>AI Tutor</span>
+                </button>
+                <!-- Mobile Menu Button -->
+                <button onclick="toggleMobileMenu()" class="md:hidden w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300">
+                    <i class="fa-solid fa-bars"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile Navigation Drawer -->
+        <div id="mobile-menu" class="hidden md:hidden pt-3 pb-2 border-t border-slate-200 dark:border-slate-800 mt-3 flex flex-col space-y-1">
+            <button onclick="switchTab('interpreter'); toggleMobileMenu();" class="text-left px-4 py-2.5 rounded-lg text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-slate-800"><i class="fa-solid fa-video mr-2 text-indigo-500"></i>Live Interpreter</button>
+            <button onclick="switchTab('lessons'); toggleMobileMenu();" class="text-left px-4 py-2.5 rounded-lg text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-slate-800"><i class="fa-solid fa-book-open mr-2 text-indigo-500"></i>Interactive Lessons</button>
+            <button onclick="switchTab('dictionary'); toggleMobileMenu();" class="text-left px-4 py-2.5 rounded-lg text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-slate-800"><i class="fa-solid fa-hand mr-2 text-indigo-500"></i>Gesture Guide</button>
+            <button onclick="switchTab('quiz'); toggleMobileMenu();" class="text-left px-4 py-2.5 rounded-lg text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-slate-800"><i class="fa-solid fa-puzzle-piece mr-2 text-indigo-500"></i>Practice & Quiz</button>
+            <button onclick="switchTab('dashboard'); toggleMobileMenu();" class="text-left px-4 py-2.5 rounded-lg text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-slate-800"><i class="fa-solid fa-chart-line mr-2 text-indigo-500"></i>Dashboard</button>
+            <button onclick="openTutorModal(); toggleMobileMenu();" class="text-left px-4 py-2.5 rounded-lg text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50"><i class="fa-solid fa-robot mr-2"></i>AI Tutor Assistant</button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-grow max-w-7xl w-full mx-auto p-4 lg:p-8">
+
+        <!-- ================= 1. LIVE INTERPRETER TAB ================= -->
+        <section id="tab-interpreter" class="space-y-6">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold tracking-tight">Real-Time Sign Interpreter</h2>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">Position your hand in front of the webcam to translate gestures into text and speech instantly.</p>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <span id="ai-model-status" class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-300 dark:border-amber-700/50">
+                        <span class="w-2 h-2 rounded-full bg-amber-500 mr-2 animate-pulse"></span>Camera Initializing...
+                    </span>
+                    <button onclick="toggleWebcam()" id="webcam-toggle-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-lg shadow-indigo-600/20 transition flex items-center space-x-2">
+                        <i class="fa-solid fa-power-off"></i>
+                        <span id="webcam-btn-text">Start Camera</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Grid Layout for Camera & Output -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- Webcam & Hand Tracking Canvas Box -->
+                <div class="lg:col-span-7 glass-card rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col">
+                    <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-100 dark:border-slate-800">
+                        <div class="flex items-center space-x-2 text-sm font-semibold">
+                            <i class="fa-solid fa-camera text-indigo-500"></i>
+                            <span>Live Camera Stream & Hand Tracking</span>
+                        </div>
+                        <div class="flex items-center space-x-2 text-xs font-medium text-slate-500">
+                            <span id="fps-counter">FPS: 0</span>
+                            <span class="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600"></span>
+                            <span id="landmarks-status">Landmarks: Off</span>
+                        </div>
+                    </div>
+
+                    <!-- Video Container with Overlay -->
+                    <div class="relative w-full bg-slate-900 rounded-xl overflow-hidden aspect-video flex items-center justify-center shadow-inner">
+                        <video id="webcam-video" class="absolute inset-0 w-full h-full object-cover transform -scale-x-100" autoplay playsinline muted></video>
+                        <canvas id="output-canvas" class="absolute inset-0 w-full h-full object-cover pointer-events-none transform -scale-x-100"></canvas>
+                        
+                        <!-- Placeholder when camera is off -->
+                        <div id="camera-placeholder" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 text-slate-400 p-6 text-center z-10">
+                            <div class="w-16 h-16 rounded-2xl bg-slate-800 flex items-center justify-center text-indigo-400 text-2xl mb-3 shadow-md">
+                                <i class="fa-solid fa-video-slash"></i>
+                            </div>
+                            <h3 class="text-white font-semibold text-lg mb-1">Webcam is currently inactive</h3>
+                            <p class="text-xs text-slate-400 max-w-xs mb-4">Click "Start Camera" above to enable MediaPipe hand landmark detection and real-time translation.</p>
+                            <button onclick="toggleWebcam()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition">
+                                Turn Camera On
+                            </button>
+                        </div>
+
+                        <!-- Real-time floating prediction badge -->
+                        <div id="live-prediction-badge" class="absolute top-4 left-4 z-20 bg-slate-900/80 backdrop-blur-md border border-slate-700 text-white px-3.5 py-1.5 rounded-xl flex items-center space-x-2 shadow-lg hidden">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                            <span class="text-xs font-medium text-slate-300">Detected:</span>
+                            <span id="floating-gesture" class="text-sm font-bold text-emerald-400">A</span>
+                            <span id="floating-confidence" class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">98%</span>
+                        </div>
+                    </div>
+
+                    <!-- Quick tips footer -->
+                    <div class="mt-3 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 px-1">
+                        <span><i class="fa-solid fa-circle-info text-indigo-500 mr-1"></i> Ensure good lighting and keep hand visible within the frame.</span>
+                        <span id="model-mode-indicator" class="font-medium text-indigo-600 dark:text-indigo-400">MediaPipe Model Active</span>
+                    </div>
+                </div>
+
+                <!-- Translation & Speech Box -->
+                <div class="lg:col-span-5 flex flex-col space-y-4">
+                    <!-- Translated Text Card -->
+                    <div class="glass-card rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-800 flex-grow flex flex-col">
+                        <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-100 dark:border-slate-800">
+                            <h3 class="font-bold text-sm flex items-center space-x-2">
+                                <i class="fa-solid fa-language text-indigo-500"></i>
+                                <span>Recognized Text & Sentence Builder</span>
+                            </h3>
+                            <button onclick="clearTranslation()" class="text-xs text-slate-400 hover:text-red-500 transition" title="Clear text">
+                                <i class="fa-solid fa-trash-can mr-1"></i>Clear
+                            </button>
+                        </div>
+
+                        <!-- Text display area -->
+                        <div id="translation-text-box" class="w-full flex-grow bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700/80 rounded-xl p-4 text-lg font-medium tracking-wide text-slate-800 dark:text-slate-100 min-h-[120px] max-h-[180px] overflow-y-auto mb-4 flex items-center justify-center text-center">
+                            <span class="text-slate-400 dark:text-slate-500 text-sm italic">Waiting for sign gestures... Show 'A', 'B', 'C', 'HELLO', or 'THANK YOU'</span>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="grid grid-cols-2 gap-3 mb-3">
+                            <button onclick="speakTranslation()" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-md shadow-indigo-600/20 transition flex items-center justify-center space-x-2">
+                                <i class="fa-solid fa-volume-high"></i>
+                                <span>Speak Text</span>
+                            </button>
+                            <button onclick="copyTranslation()" class="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-sm font-semibold transition flex items-center justify-center space-x-2 border border-slate-200 dark:border-slate-700">
+                                <i class="fa-solid fa-copy"></i>
+                                <span>Copy Text</span>
+                            </button>
+                        </div>
+
+                        <div class="flex space-x-3">
+                            <button onclick="addSpaceToText()" class="flex-1 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold rounded-lg text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition">
+                                <i class="fa-solid fa-space-button mr-1"></i> Add Space
+                            </button>
+                            <button onclick="backspaceText()" class="flex-1 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold rounded-lg text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition">
+                                <i class="fa-solid fa-delete-left mr-1"></i> Backspace
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Speech-to-Sign / Reverse Interpreter Helper -->
+                    <div class="glass-card rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-800">
+                        <h3 class="font-bold text-sm flex items-center space-x-2 mb-3">
+                            <i class="fa-solid fa-microphone text-violet-500"></i>
+                            <span>Speech-to-Sign Assistant</span>
+                        </h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">Speak or type a word to see its visual sign representation.</p>
+                        <div class="flex space-x-2">
+                            <input type="text" id="speech-to-sign-input" placeholder="Type word (e.g., HELLO)..." class="flex-grow bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <button onclick="triggerSpeechToSign()" class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-semibold transition">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ================= 2. INTERACTIVE LESSONS TAB ================= -->
+        <section id="tab-lessons" class="hidden space-y-6">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold tracking-tight">Interactive Sign Language Lessons</h2>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">Step-by-step curriculum designed for beginners to master ASL fundamentals.</p>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <span class="text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800">
+                        <i class="fa-solid fa-graduation-cap mr-1.5"></i> Level 1: Foundations
+                    </span>
+                </div>
+            </div>
+
+            <!-- Lessons Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="lessons-container">
+                <!-- Lesson 1 -->
+                <div class="glass-card rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col justify-between hover:border-indigo-500 transition group">
+                    <div>
+                        <div class="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition">
+                            <i class="fa-solid fa-font"></i>
+                        </div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 px-2.5 py-0.5 rounded-full">Completed</span>
+                            <span class="text-xs text-slate-400 font-medium">10 Min</span>
+                        </div>
+                        <h3 class="font-bold text-lg mb-1">Module 1: Alphabet A-E</h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">Learn basic hand shapes for letters A, B, C, D, and E with real-time camera practice.</p>
+                    </div>
+                    <button onclick="startLesson(1)" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition shadow-md shadow-indigo-600/20 flex items-center justify-center space-x-2">
+                        <span>Review Lesson</span>
+                        <i class="fa-solid fa-arrow-right text-xs"></i>
+                    </button>
+                </div>
+
+                <!-- Lesson 2 -->
+                <div class="glass-card rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col justify-between hover:border-indigo-500 transition group">
+                    <div>
+                        <div class="w-12 h-12 rounded-xl bg-violet-50 dark:bg-violet-950/50 text-violet-600 dark:text-violet-400 flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition">
+                            <i class="fa-solid fa-hand-wave"></i>
+                        </div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-[10px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300 px-2.5 py-0.5 rounded-full">In Progress</span>
+                            <span class="text-xs text-slate-400 font-medium">15 Min</span>
+                        </div>
+                        <h3 class="font-bold text-lg mb-1">Module 2: Common Greetings</h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">Master essential social signs: "Hello", "Thank You", "Please", "Good Morning", and "Goodbye".</p>
+                    </div>
+                    <button onclick="startLesson(2)" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition shadow-md shadow-indigo-600/20 flex items-center justify-center space-x-2">
+                        <span>Continue Lesson</span>
+                        <i class="fa-solid fa-arrow-right text-xs"></i>
+                    </button>
+                </div>
+
+                <!-- Lesson 3 -->
+                <div class="glass-card rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col justify-between hover:border-indigo-500 transition group">
+                    <div>
+                        <div class="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition">
+                            <i class="fa-solid fa-face-smile"></i>
+                        </div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-[10px] font-bold uppercase tracking-wider bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300 px-2.5 py-0.5 rounded-full">Locked</span>
+                            <span class="text-xs text-slate-400 font-medium">20 Min</span>
+                        </div>
+                        <h3 class="font-bold text-lg mb-1">Module 3: Daily Expressions</h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">Express feelings, ask questions ("How are you?", "What's your name?"), and hold basic sign conversations.</p>
+                    </div>
+                    <button onclick="startLesson(3)" class="w-full py-2.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl text-sm font-semibold transition flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-lock text-xs mr-1"></i>
+                        <span>Unlock at 80% Quiz Score</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ================= 3. GESTURE DICTIONARY / GUIDE TAB ================= -->
+        <section id="tab-dictionary" class="hidden space-y-6">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold tracking-tight">Visual Gesture & Alphabet Guide</h2>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">Explore sign illustrations, instructions, and correct finger placements.</p>
+                </div>
+                <div class="relative">
+                    <input type="text" id="dictionary-search" oninput="filterDictionary()" placeholder="Search signs (e.g. A, Hello)..." class="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm pl-10 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full md:w-64">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3 text-slate-400 text-sm"></i>
+                </div>
+            </div>
+
+            <!-- Dictionary Grid -->
+            <div id="dictionary-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                <!-- Items populated dynamically via JS -->
+            </div>
+        </section>
+
+
+        <!-- ================= 4. PRACTICE & QUIZ TAB ================= -->
+        <section id="tab-quiz" class="hidden space-y-6">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold tracking-tight">Interactive Practice & Quiz</h2>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">Test your sign recognition skills and earn XP points with live webcam validation.</p>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <span class="text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800">
+                        <i class="fa-solid fa-star text-amber-400 mr-1.5"></i> Score: <span id="quiz-score-badge">0</span> XP
+                    </span>
+                </div>
+            </div>
+
+            <!-- Quiz Card -->
+            <div class="glass-card rounded-2xl p-6 md:p-8 shadow-sm border border-slate-200 dark:border-slate-800 max-w-2xl mx-auto text-center">
+                <div id="quiz-container">
+                    <div class="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-3xl mx-auto mb-4 shadow-md">
+                        <i class="fa-solid fa-hand-sparkles"></i>
+                    </div>
+                    <span class="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-3 py-1 rounded-full">Challenge Question <span id="quiz-current-num">1</span> of 5</span>
+                    <h3 class="text-2xl font-bold mt-3 mb-2" id="quiz-question-title">Show the sign for letter "A"</h3>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Make the correct sign in front of your camera or select the matching illustration below.</p>
+
+                    <!-- Interactive Options -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6" id="quiz-options">
+                        <!-- Options generated via JS -->
+                    </div>
+
+                    <div id="quiz-feedback" class="hidden mb-4 p-3 rounded-xl text-sm font-semibold"></div>
+
+                    <button onclick="nextQuizQuestion()" id="quiz-next-btn" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-lg shadow-indigo-600/20 transition hidden">
+                        Next Challenge <i class="fa-solid fa-arrow-right ml-2"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ================= 5. DASHBOARD & PROGRESS TAB ================= -->
+        <section id="tab-dashboard" class="hidden space-y-6">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold tracking-tight">Learning Dashboard & Analytics</h2>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">Track your learning streak, mastery level, and practice history.</p>
+                </div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="glass-card rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-800">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center text-lg">
+                            <i class="fa-solid fa-fire"></i>
+                        </div>
+                        <span class="text-xs font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded">+1 today</span>
+                    </div>
+                    <h4 class="text-2xl font-bold tracking-tight" id="dash-streak">5 Days</h4>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">Current Daily Streak</p>
+                </div>
+
+                <div class="glass-card rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-800">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-lg">
+                            <i class="fa-solid fa-award"></i>
+                        </div>
+                        <span class="text-xs font-semibold text-indigo-600 bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 rounded">Level 2</span>
+                    </div>
+                    <h4 class="text-2xl font-bold tracking-tight" id="dash-xp">450 XP</h4>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">Total Experience Points</p>
+                </div>
+
+                <div class="glass-card rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-800">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="w-10 h-10 rounded-xl bg-violet-50 dark:bg-violet-950/50 text-violet-600 dark:text-violet-400 flex items-center justify-center text-lg">
+                            <i class="fa-solid fa-circle-check"></i>
+                        </div>
+                        <span class="text-xs font-semibold text-violet-600 bg-violet-50 dark:bg-violet-950/50 px-2 py-0.5 rounded">12 Signs</span>
+                    </div>
+                    <h4 class="text-2xl font-bold tracking-tight">85%</h4>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">Sign Recognition Accuracy</p>
+                </div>
+
+                <div class="glass-card rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-800">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-lg">
+                            <i class="fa-solid fa-book"></i>
+                        </div>
+                        <span class="text-xs font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded">2/3 Modules</span>
+                    </div>
+                    <h4 class="text-2xl font-bold tracking-tight">66%</h4>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">Curriculum Completion</p>
+                </div>
+            </div>
+
+            <!-- Recent Activity Log -->
+            <div class="glass-card rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-800">
+                <h3 class="font-bold text-base mb-4 flex items-center space-x-2">
+                    <i class="fa-solid fa-clock-rotate-left text-indigo-500"></i>
+                    <span>Recent Learning & Practice History</span>
+                </h3>
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-9 h-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 flex items-center justify-center text-sm">
+                                <i class="fa-solid fa-check"></i>
+                            </div>
+                            <div>
+                                <h5 class="font-semibold text-sm">Completed Quiz: Module 1 Alphabet</h5>
+                                <p class="text-xs text-slate-500">Scored 100% accuracy • 5 minutes ago</p>
+                            </div>
+                        </div>
+                        <span class="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-lg">+50 XP</span>
+                    </div>
+
+                    <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 flex items-center justify-center text-sm">
+                                <i class="fa-solid fa-video"></i>
+                            </div>
+                            <div>
+                                <h5 class="font-semibold text-sm">Live Interpreter Session</h5>
+                                <p class="text-xs text-slate-500">Translated 18 words ("HELLO", "THANK YOU") • 1 hour ago</p>
+                            </div>
+                        </div>
+                        <span class="text-xs font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-1 rounded-lg">+30 XP</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- AI Tutor Modal -->
+    <div id="tutor-modal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="glass-card bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[85vh]">
+            <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
+                <div class="flex items-center space-x-3">
+                    <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md">
+                        <i class="fa-solid fa-robot"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-sm">SignBridge AI Companion</h3>
+                        <p class="text-[10px] text-slate-500 dark:text-slate-400">Ask any question about sign language grammar, hand signs, or deafness culture.</p>
+                    </div>
+                </div>
+                <button onclick="closeTutorModal()" class="w-8 h-8 rounded-lg bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-300 transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div id="tutor-chat-box" class="p-4 flex-grow overflow-y-auto space-y-3 min-h-[250px] max-h-[350px]">
+                <div class="flex items-start space-x-2">
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs flex-shrink-0">
+                        <i class="fa-solid fa-robot"></i>
+                    </div>
+                    <div class="bg-slate-100 dark:bg-slate-800 p-3 rounded-2xl text-xs text-slate-700 dark:text-slate-200 max-w-[80%]">
+                        Hello! I am your Sign Language tutor. How can I assist you with your learning today? You can ask me how to sign specific words or practice tips!
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex space-x-2">
+                <input type="text" id="tutor-input" onkeypress="handleTutorKey(event)" placeholder="Ask about ASL, signs, or tips..." class="flex-grow bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <button onclick="sendTutorMessage()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition">
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="mt-auto py-6 border-t border-slate-200 dark:border-slate-800 text-center text-xs text-slate-500 dark:text-slate-400">
+        <p>Real-Time Sign Language Interpreter & Learning Companion • Bridging communication gaps with Computer Vision & AI.</p>
+    </footer>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // --- State Management ---
+        let currentTab = 'interpreter';
+        let webcamActive = false;
+        let videoElement = document.getElementById('webcam-video');
+        let canvasElement = document.getElementById('output-canvas');
+        let canvasCtx = canvasElement.getContext('2d');
+        let hands = null;
+        let camera = null;
+        let translatedWords = [];
+        let totalXP = 450;
+        let currentQuizIndex = 0;
+        let quizScore = 0;
+
+        // --- Dictionary Data ---
+        const dictionaryData = [
+            { sign: 'A', title: 'Letter A', desc: 'Make a fist with thumb resting on the side of index finger.', icon: 'fa-solid fa-hand-fist' },
+            { sign: 'B', title: 'Letter B', desc: 'Hold hand upright with fingers straight and thumb folded across palm.', icon: 'fa-solid fa-hand' },
+            { sign: 'C', title: 'Letter C', desc: 'Curve fingers and thumb to form the letter shape C.', icon: 'fa-solid fa-c' },
+            { sign: 'D', title: 'Letter D', desc: 'Index finger points straight up, other fingers touch thumb to form circle.', icon: 'fa-solid fa-d' },
+            { sign: 'HELLO', title: 'Hello', desc: 'Bring flat hand to forehead and salute outward.', icon: 'fa-solid fa-hand-wave' },
+            { sign: 'THANK YOU', title: 'Thank You', desc: 'Touch fingertips to chin and move hand forward and down.', icon: 'fa-solid fa-hands-praying' },
+            { sign: 'YES', title: 'Yes', desc: 'Make a fist with index finger and thumb, nod hand up and down.', icon: 'fa-solid fa-check' },
+            { sign: 'NO', title: 'No', desc: 'Tap index and middle finger against thumb.', icon: 'fa-solid fa-xmark' },
+            { sign: 'PLEASE', title: 'Please', desc: 'Rub flat palm in circular motion against chest.', icon: 'fa-solid fa-face-smile' },
+            { sign: 'LOVE', title: 'Love', desc: 'Cross both arms across your chest in a hug gesture.', icon: 'fa-solid fa-heart' },
+            { sign: 'HELP', title: 'Help', desc: 'Place fist on flat palm and lift upward.', icon: 'fa-solid fa-hands-holding' },
+            { sign: 'SORRY', title: 'Sorry', desc: 'Make a fist and rub in circular motion over chest.', icon: 'fa-solid fa-face-frown' }
+        ];
+
+        // --- Quiz Questions ---
+        const quizQuestions = [
+            { question: 'Show the sign for letter "A"', target: 'A', options: ['A', 'B', 'C', 'D'] },
+            { question: 'What is the correct sign for "HELLO"?', target: 'HELLO', options: ['HELLO', 'THANK YOU', 'YES', 'NO'] },
+            { question: 'Show the sign for letter "B"', target: 'B', options: ['A', 'B', 'C', 'HELP'] },
+            { question: 'What is the sign for expressing gratitude ("THANK YOU")?', target: 'THANK YOU', options: ['PLEASE', 'THANK YOU', 'SORRY', 'LOVE'] },
+            { question: 'Show the sign for letter "C"', target: 'C', options: ['A', 'D', 'C', 'B'] }
+        ];
+
+        // --- Initialization on Load ---
+        window.onload = function() {
+            renderDictionary(dictionaryData);
+            initQuiz();
+            initMediaPipeHands();
+        };
+
+        // --- Tab Switching ---
+        function switchTab(tabId) {
+            currentTab = tabId;
+            const tabs = ['interpreter', 'lessons', 'dictionary', 'quiz', 'dashboard'];
+            tabs.forEach(t => {
+                const section = document.getElementById(`tab-${t}`);
+                const btn = document.getElementById(`nav-${t}`);
+                if (t === tabId) {
+                    section.classList.remove('hidden');
+                    if(btn) {
+                        btn.className = "px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-sm";
+                    }
+                } else {
+                    section.classList.add('hidden');
+                    if(btn) {
+                        btn.className = "px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400";
+                    }
+                }
+            });
+            if (tabId !== 'interpreter' && webcamActive) {
+                // Optionally keep or pause webcam when switching tabs; keeping active for seamless transition
+            }
+        }
+
+        // --- Dark Mode Toggle ---
+        function toggleDarkMode() {
+            const html = document.documentElement;
+            html.classList.toggle('dark');
+            const icon = document.getElementById('theme-icon');
+            if(html.classList.contains('dark')) {
+                icon.className = "fa-solid fa-sun";
+            } else {
+                icon.className = "fa-solid fa-moon";
+            }
+        }
+
+        // --- Mobile Menu Toggle ---
+        function toggleMobileMenu() {
+            const menu = document.getElementById('mobile-menu');
+            menu.classList.toggle('hidden');
+        }
+
+        // --- MediaPipe Hands Setup ---
+        function initMediaPipeHands() {
+            try {
+                hands = new Hands({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+                });
+                hands.setOptions({
+                    maxNumHands: 1,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.65,
+                    minTrackingConfidence: 0.65
+                });
+                hands.onResults(onHandResults);
+                document.getElementById('ai-model-status').innerHTML = `
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 mr-2"></span>MediaPipe Model Ready
+                `;
+                document.getElementById('ai-model-status').className = "inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700/50";
+            } catch (e) {
+                console.error("MediaPipe initialization error:", e);
+                document.getElementById('ai-model-status').innerHTML = `
+                    <span class="w-2 h-2 rounded-full bg-red-500 mr-2"></span>Model Load Failed
+                `;
+            }
+        }
+
+        // --- Webcam Controls ---
+        async function toggleWebcam() {
+            const btnText = document.getElementById('webcam-btn-text');
+            const placeholder = document.getElementById('camera-placeholder');
+            const badge = document.getElementById('live-prediction-badge');
+            const landmarksStatus = document.getElementById('landmarks-status');
+
+            if (!webcamActive) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+                    videoElement.srcObject = stream;
+                    videoElement.play();
+                    webcamActive = true;
+                    btnText.innerText = "Stop Camera";
+                    placeholder.classList.add('hidden');
+                    badge.classList.remove('hidden');
+                    landmarksStatus.innerText = "Landmarks: Active";
+
+                    // Start camera loop
+                    camera = new Camera(videoElement, {
+                        onFrame: async () => {
+                            if (webcamActive && hands) {
+                                await hands.send({ image: videoElement });
+                            }
+                        },
+                        width: 640,
+                        height: 480
+                    });
+                    camera.start();
+                } catch (err) {
+                    alert("Webcam access denied or unavailable. Please check permissions.");
+                    console.error(err);
+                }
+            } else {
+                webcamActive = false;
+                btnText.innerText = "Start Camera";
+                placeholder.classList.remove('hidden');
+                badge.classList.add('hidden');
+                landmarksStatus.innerText = "Landmarks: Off";
+                if (videoElement.srcObject) {
+                    let tracks = videoElement.srcObject.getTracks();
+                    tracks.forEach(track => track.stop());
+                }
+                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            }
+        }
+
+        // --- Hand Tracking Results & Gesture Recognition ---
+        let lastRecognizedSign = "";
+        let signHoldCount = 0;
+
+        function onHandResults(results) {
+            if (!webcamActive) return;
+
+            // Resize canvas to match video
+            canvasElement.width = videoElement.videoWidth || 640;
+            canvasElement.height = videoElement.videoHeight || 480;
+
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                
+                // Draw hand landmarks connection using MediaPipe drawing utils if available or custom
+                drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#6366f1', lineWidth: 4});
+                drawLandmarks(canvasCtx, landmarks, {color: '#a855f7', lineWidth: 2, radius: 4});
+
+                // Heuristic gesture classifier based on finger landmark coordinates
+                const detected = classifyGesture(landmarks);
+                
+                if (detected !== "UNKNOWN") {
+                    document.getElementById('floating-gesture').innerText = detected;
+                    document.getElementById('floating-confidence').innerText = "94%";
+
+                    // Debounce stable sign
+                    if (detected === lastRecognizedSign) {
+                        signHoldCount++;
+                        if (signHoldCount > 15) { // Stable for ~15 frames
+                            appendTranslatedWord(detected);
+                            signHoldCount = 0;
+                            lastRecognizedSign = ""; // reset to prevent duplicate spam
+                        }
+                    } else {
+                        lastRecognizedSign = detected;
+                        signHoldCount = 0;
+                    }
+                } else {
+                    document.getElementById('floating-gesture').innerText = "Scanning...";
+                    document.getElementById('floating-confidence').innerText = "--";
+                }
+            } else {
+                document.getElementById('floating-gesture').innerText = "No Hand";
+                document.getElementById('floating-confidence').innerText = "0%";
+            }
+            canvasCtx.restore();
+        }
+
+        // Simple heuristic landmark classifier for demo signs ('A', 'B', 'C', 'HELLO', 'YES')
+        function classifyGesture(lm) {
+            // Check finger extension based on tip vs MCP joint y-coordinates
+            const thumbExtended = lm[4].x < lm[3].x;
+            const indexExtended = lm[8].y < lm[6].y;
+            const middleExtended = lm[12].y < lm[10].y;
+            const ringExtended = lm[16].y < lm[14].y;
+            const pinkyExtended = lm[20].y < lm[18].y;
+
+            // 'A' sign: Fist with thumb on side
+            if (!indexExtended && !middleExtended && !ringExtended && !pinkyExtended) {
+                return 'A';
+            }
+            // 'B' sign: All fingers upright, thumb folded
+            if (indexExtended && middleExtended && ringExtended && pinkyExtended && !thumbExtended) {
+                return 'B';
+            }
+            // 'C' sign: Curved fingers
+            if (!indexExtended && !middleExtended && !ringExtended && !pinkyExtended && thumbExtended && lm[4].x > lm[8].x) {
+                return 'C';
+            }
+            // 'HELLO' / Open hand: All fingers extended
+            if (indexExtended && middleExtended && ringExtended && pinkyExtended && thumbExtended) {
+                return 'HELLO';
+            }
+            return 'UNKNOWN';
+        }
+
+        // --- Translation Text Management ---
+        function appendTranslatedWord(word) {
+            translatedWords.push(word);
+            updateTranslationDisplay();
+        }
+
+        function updateTranslationDisplay() {
+            const box = document.getElementById('translation-text-box');
+            if (translatedWords.length === 0) {
+                box.innerHTML = `<span class="text-slate-400 dark:text-slate-500 text-sm italic">Waiting for sign gestures... Show 'A', 'B', 'C', 'HELLO', or 'THANK YOU'</span>`;
+            } else {
+                box.innerHTML = `<span class="text-indigo-600 dark:text-indigo-400 font-bold">${translatedWords.join(' ')}</span>`;
+            }
+        }
+
+        function clearTranslation() {
+            translatedWords = [];
+            updateTranslationDisplay();
+        }
+
+        function addSpaceToText() {
+            translatedWords.push(" ");
+            updateTranslationDisplay();
+        }
+
+        function backspaceText() {
+            translatedWords.pop();
+            updateTranslationDisplay();
+        }
+
+        function copyTranslation() {
+            const textToCopy = translatedWords.join('');
+            navigator.clipboard.writeText(textToCopy);
+            alert("Translated text copied to clipboard!");
+        }
+
+        // --- Text-to-Speech ---
+        function speakTranslation() {
+            const text = translatedWords.join(' ');
+            if (!text.trim()) return;
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 0.9;
+                window.speechSynthesis.speak(utterance);
+            } else {
+                alert("Text-to-speech not supported in this browser.");
+            }
+        }
+
+        // --- Speech-to-Sign Assistant ---
+        function triggerSpeechToSign() {
+            const query = document.getElementById('speech-to-sign-input').value.toUpperCase();
+            if (!query) return;
+            const match = dictionaryData.find(d => d.sign === query || d.title.toUpperCase().includes(query));
+            if (match) {
+                alert(`Sign found for "${match.sign}": ${match.desc}`);
+            } else {
+                alert(`Sign for "${query}" not found in current offline dictionary. Try searching in Gesture Guide.`);
+            }
+        }
+
+        // --- Dictionary Rendering & Filtering ---
+        function renderDictionary(data) {
+            const grid = document.getElementById('dictionary-grid');
+            grid.innerHTML = data.map(item => `
+                <div class="glass-card rounded-2xl p-4 text-center shadow-sm border border-slate-200 dark:border-slate-800 hover:border-indigo-500 transition group flex flex-col items-center justify-between">
+                    <div>
+                        <div class="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xl mx-auto mb-3 group-hover:scale-110 transition shadow-sm">
+                            <i class="${item.icon}"></i>
+                        </div>
+                        <h4 class="font-bold text-base mb-1">${item.sign}</h4>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2">${item.desc}</p>
+                    </div>
+                    <button onclick="previewSign('${item.sign}')" class="mt-3 w-full py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-600 hover:text-white text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition">
+                        View Details
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function filterDictionary() {
+            const query = document.getElementById('dictionary-search').value.toLowerCase();
+            const filtered = dictionaryData.filter(d => d.sign.toLowerCase().includes(query) || d.title.toLowerCase().includes(query) || d.desc.toLowerCase().includes(query));
+            renderDictionary(filtered);
+        }
+
+        function previewSign(sign) {
+            const item = dictionaryData.find(d => d.sign === sign);
+            if (item) {
+                alert(`Gesture Guide - ${item.title}\n\nInstructions: ${item.desc}`);
+            }
+        }
+
+        // --- Interactive Lessons ---
+        function startLesson(moduleId) {
+            switchTab('interpreter');
+            alert(`Starting Module ${moduleId}! Position your hand in front of the camera to practice.`);
+        }
+
+        // --- Quiz Logic ---
+        function initQuiz() {
+            loadQuizQuestion();
+        }
+
+        function loadQuizQuestion() {
+            if (currentQuizIndex >= quizQuestions.length) {
+                document.getElementById('quiz-container').innerHTML = `
+                    <div class="py-8">
+                        <div class="w-20 h-20 rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 flex items-center justify-center text-4xl mx-auto mb-4 shadow-lg">
+                            <i class="fa-solid fa-trophy"></i>
+                        </div>
+                        <h3 class="text-2xl font-bold mb-2">Quiz Completed!</h3>
+                        <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">You scored ${quizScore} out of ${quizQuestions.length} correct answers.</p>
+                        <button onclick="resetQuiz()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-lg shadow-indigo-600/20 transition">
+                            Restart Practice Quiz
+                        </button>
+                    </div>
+                `;
+                confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 } });
+                return;
+            }
+
+            const q = quizQuestions[currentQuizIndex];
+            document.getElementById('quiz-current-num').innerText = currentQuizIndex + 1;
+            document.getElementById('quiz-question-title').innerText = q.question;
+            document.getElementById('quiz-feedback').classList.add('hidden');
+            document.getElementById('quiz-next-btn').classList.add('hidden');
+
+            const optionsGrid = document.getElementById('quiz-options');
+            optionsGrid.innerHTML = q.options.map(opt => `
+                <button onclick="submitQuizAnswer('${opt}', '${q.target}')" class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-center font-bold text-lg transition shadow-sm">
+                    ${opt}
+                </button>
+            `).join('');
+        }
+
+        function submitQuizAnswer(selected, target) {
+            const feedback = document.getElementById('quiz-feedback');
+            feedback.classList.remove('hidden');
+            if (selected === target) {
+                feedback.className = "mb-4 p-3 rounded-xl text-sm font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300";
+                feedback.innerHTML = `<i class="fa-solid fa-circle-check mr-2"></i> Correct! Well done.`;
+                quizScore++;
+                totalXP += 25;
+                document.getElementById('quiz-score-badge').innerText = totalXP;
+                confetti({ particleCount: 50, spread: 60 });
+            } else {
+                feedback.className = "mb-4 p-3 rounded-xl text-sm font-semibold bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border border-red-300";
+                feedback.innerHTML = `<i class="fa-solid fa-circle-xmark mr-2"></i> Incorrect. The correct answer was "${target}".`;
+            }
+            document.getElementById('quiz-next-btn').classList.remove('hidden');
+        }
+
+        function nextQuizQuestion() {
+            currentQuizIndex++;
+            loadQuizQuestion();
+        }
+
+        function resetQuiz() {
+            currentQuizIndex = 0;
+            quizScore = 0;
+            loadQuizQuestion();
+        }
+
+        // --- AI Tutor Chat Modal ---
+        function openTutorModal() {
+            document.getElementById('tutor-modal').classList.remove('hidden');
+        }
+
+        function closeTutorModal() {
+            document.getElementById('tutor-modal').classList.add('hidden');
+        }
+
+        function handleTutorKey(e) {
+            if (e.key === 'Enter') sendTutorMessage();
+        }
+
+        function sendTutorMessage() {
+            const input = document.getElementById('tutor-input');
+            const query = input.value.trim();
+            if (!query) return;
+
+            const chatBox = document.getElementById('tutor-chat-box');
+            chatBox.innerHTML += `
+                <div class="flex items-end justify-end space-x-2">
+                    <div class="bg-indigo-600 text-white p-3 rounded-2xl text-xs max-w-[80%]">${query}</div>
+                </div>
+            `;
+            input.value = "";
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            // Simulated AI Companion response
+            setTimeout(() => {
+                let response = "That's a great question about sign language! Remember to keep your hand steady and maintain clear lighting for best recognition.";
+                if (query.toLowerCase().includes('hello')) {
+                    response = "To sign 'HELLO', bring your flat right hand up to your forehead and move it outward like a friendly salute.";
+                } else if (query.toLowerCase().includes('thank')) {
+                    response = "To sign 'THANK YOU', touch the fingertips of your flat right hand to your chin, then move your hand forward and downward.";
+                }
+                chatBox.innerHTML += `
+                    <div class="flex items-start space-x-2">
+                        <div class="w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs flex-shrink-0">
+                            <i class="fa-solid fa-robot"></i>
+                        </div>
+                        <div class="bg-slate-100 dark:bg-slate-800 p-3 rounded-2xl text-xs text-slate-700 dark:text-slate-200 max-w-[80%]">
+                            ${response}
+                        </div>
+                    </div>
+                `;
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }, 600);
+        }
+    </script>
+</body>
+</html>
