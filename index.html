@@ -131,7 +131,7 @@
                 </div>
                 <div class="flex items-center space-x-3">
                     <span id="ai-model-status" class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-300 dark:border-amber-700/50">
-                        <span class="w-2 h-2 rounded-full bg-amber-500 mr-2 animate-pulse"></span>Camera Initializing...
+                        <span class="w-2 h-2 rounded-full bg-amber-500 mr-2 animate-pulse"></span>Camera off
                     </span>
                     <button onclick="toggleWebcam()" id="webcam-toggle-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-lg shadow-indigo-600/20 transition flex items-center space-x-2">
                         <i class="fa-solid fa-power-off"></i>
@@ -539,6 +539,7 @@
         let hands = null;
         let modelReady = null;
         let cameraStarting = false;
+        let cameraSession = 0;
         let frameRequest = null;
         let translatedWords = [];
         let totalXP = 450;
@@ -668,7 +669,7 @@
                     });
                     hands.onResults(onHandResults);
                     await hands.initialize();
-                    setModelStatus('Hand detection model ready');
+                    if (webcamActive) setModelStatus('Camera live. Hand detection ready');
                 })();
             }
             try {
@@ -676,12 +677,13 @@
             } catch (error) {
                 modelReady = null;
                 hands = null;
-                setModelStatus('Model failed to load. Check your connection and retry.', true);
+                if (webcamActive) setModelStatus('Model failed to load. Check your connection and retry.', true);
                 throw error;
             }
         }
 
         function stopWebcam() {
+            cameraSession++;
             webcamActive = false;
             cancelAnimationFrame(frameRequest);
             if (videoElement.srcObject) {
@@ -698,60 +700,120 @@
             releasedAt = null;
             signStartedAt = 0;
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            setModelStatus('Camera off');
+        }
+
+        function detectionUnavailable() {
+            modelReady = null;
+            hands = null;
+            document.getElementById('live-prediction-badge').classList.add('hidden');
+            document.getElementById('landmarks-status').innerText = 'Landmarks: Unavailable';
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            setModelStatus('Camera live. Hand detection unavailable. Stop and restart to retry.', true);
+        }
+
+        // Confirm decoded video frames before reporting the camera as live.
+        function waitForCameraVideo() {
+            return new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => finish(new Error('VideoTimeout')), 15000);
+                function finish(error) {
+                    clearTimeout(timeout);
+                    videoElement.removeEventListener('loadeddata', check);
+                    videoElement.removeEventListener('resize', check);
+                    videoElement.removeEventListener('error', failed);
+                    error ? reject(error) : resolve();
+                }
+                function check() {
+                    if (videoElement.readyState >= 2 && videoElement.videoWidth > 0) finish();
+                }
+                function failed() { finish(new Error('VideoPlaybackError')); }
+                videoElement.addEventListener('loadeddata', check);
+                videoElement.addEventListener('resize', check);
+                videoElement.addEventListener('error', failed);
+                // Setting the properties explicitly also supports mobile Safari.
+                videoElement.muted = true;
+                videoElement.playsInline = true;
+                Promise.resolve(videoElement.play()).then(check, finish);
+            });
         }
 
         // Process one frame at a time from the same stream shown in the preview.
         async function processCameraFrame() {
-            if (!webcamActive) return;
+            if (!webcamActive || !hands) return;
+            const session = cameraSession;
             try {
                 if (videoElement.readyState >= 2 && videoElement.videoWidth > 0) {
                     const started = performance.now();
                     await hands.send({ image: videoElement });
                     document.getElementById('fps-counter').innerText = `FPS: ${Math.round(1000 / Math.max(1, performance.now() - started))}`;
                 }
-                if (webcamActive) frameRequest = requestAnimationFrame(processCameraFrame);
+                if (webcamActive && session === cameraSession) frameRequest = requestAnimationFrame(processCameraFrame);
             } catch (error) {
-                stopWebcam();
-                modelReady = null;
-                hands = null;
-                setModelStatus('Hand detection stopped. Restart the camera to retry.', true);
+                if (webcamActive && session === cameraSession) detectionUnavailable();
                 console.error('Hand detection failed:', error);
             }
         }
 
         // --- Webcam Controls ---
         async function toggleWebcam() {
-            if (cameraStarting) return;
             if (webcamActive) {
                 stopWebcam();
                 return;
             }
+            if (cameraStarting) return;
             cameraStarting = true;
+            const session = ++cameraSession;
             document.getElementById('webcam-btn-text').innerText = 'Starting…';
+            setModelStatus('Requesting camera access…');
             try {
-                await initMediaPipeHands();
+                if (!window.isSecureContext) throw new Error('SecureContextRequired');
+                if (!navigator.mediaDevices?.getUserMedia) throw new Error('CameraUnsupported');
+                // Open the preview before downloading or initializing the AI model.
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
                     audio: false
                 });
                 videoElement.srcObject = stream;
-                await videoElement.play();
+                setModelStatus('Starting camera preview…');
+                await waitForCameraVideo();
+                const track = stream.getVideoTracks()[0];
+                if (!track || track.readyState === 'ended') throw new Error('CameraEnded');
+                track.addEventListener('ended', () => {
+                    if (session !== cameraSession) return;
+                    stopWebcam();
+                    setModelStatus('Camera disconnected. Reconnect it and start again.', true);
+                });
                 webcamActive = true;
                 document.getElementById('webcam-btn-text').innerText = 'Stop Camera';
                 document.getElementById('camera-placeholder').classList.add('hidden');
+                document.getElementById('landmarks-status').innerText = 'Landmarks: Loading';
+            } catch (error) {
+                stopWebcam();
+                const messages = {
+                    NotAllowedError: 'Camera access blocked. Allow camera access in your browser site settings, then retry.',
+                    NotFoundError: 'No camera found. Connect a camera and retry.',
+                    NotReadableError: 'Camera unavailable. Close other apps using it and retry.',
+                    SecureContextRequired: 'Camera access requires HTTPS. Open this site using https://.',
+                    CameraUnsupported: 'Camera access is unavailable in this browser. Open the site in Safari, Chrome, or Edge.',
+                    VideoTimeout: 'Camera opened but no video arrived. Close other camera apps and retry.'
+                };
+                setModelStatus(messages[error.name] || messages[error.message] || 'Camera preview could not start. Check your camera and retry.', true);
+                console.error('Camera startup failed:', error);
+                return;
+            } finally {
+                cameraStarting = false;
+            }
+            try {
+                await initMediaPipeHands();
+                if (!webcamActive || session !== cameraSession) return;
                 document.getElementById('live-prediction-badge').classList.remove('hidden');
                 document.getElementById('floating-gesture').innerText = 'Scanning…';
                 document.getElementById('floating-confidence').innerText = '--';
                 document.getElementById('landmarks-status').innerText = 'Landmarks: Scanning';
                 frameRequest = requestAnimationFrame(processCameraFrame);
             } catch (error) {
-                stopWebcam();
-                setModelStatus(error.name === 'NotAllowedError'
-                    ? 'Camera permission denied. Allow camera access and retry.'
-                    : 'Camera or model unavailable. Check your connection and camera, then retry.', true);
-                console.error('Camera startup failed:', error);
-            } finally {
-                cameraStarting = false;
+                if (webcamActive && session === cameraSession) detectionUnavailable();
+                console.error('Hand detection startup failed:', error);
             }
         }
 
