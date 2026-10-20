@@ -58,6 +58,29 @@ test('hand results draw without external helpers and distinguish an unknown sign
     assert.equal(a.element('floating-gesture').innerText, 'No Hand');
 });
 
+test('both hands are drawn and the count follows two, one, and no hands', async () => {
+    const a = app();
+    await a.run('toggleWebcam()');
+    a.run(`
+        let drawnHands = [];
+        const originalDrawHand = drawHand;
+        drawHand = landmarks => { drawnHands.push(landmarks); originalDrawHand(landmarks); };
+        const firstHand = Array.from({length: 21}, () => ({x: .25, y: .5}));
+        const secondHand = Array.from({length: 21}, () => ({x: .75, y: .5}));
+        onHandResults({multiHandLandmarks: [firstHand, secondHand]});
+    `);
+    assert.equal(a.run('drawnHands.length'), 2);
+    assert.equal(a.run('drawnHands[0] === firstHand && drawnHands[1] === secondHand'), true);
+    assert.equal(a.element('landmarks-status').innerText, 'Landmarks: 2 hands detected');
+    a.run('drawnHands = []; onHandResults({multiHandLandmarks: [secondHand]})');
+    assert.equal(a.run('drawnHands.length'), 1);
+    assert.equal(a.run('drawnHands[0] === secondHand'), true);
+    assert.equal(a.element('landmarks-status').innerText, 'Landmarks: 1 hand detected');
+    a.run('drawnHands = []; onHandResults({multiHandLandmarks: []})');
+    assert.equal(a.run('drawnHands.length'), 0);
+    assert.match(a.element('landmarks-status').innerText, /Show your whole hand/);
+});
+
 test('processing failure releases the camera and exposes retry status', async () => {
     const a = app({ failFrame: true });
     await a.run('toggleWebcam()');

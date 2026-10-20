@@ -184,7 +184,7 @@
 
                     <!-- Quick tips footer -->
                     <div class="mt-3 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 px-1">
-                        <span><i class="fa-solid fa-circle-info text-indigo-500 mr-1"></i> Ensure good lighting and keep hand visible within the frame.</span>
+                        <span><i class="fa-solid fa-circle-info text-indigo-500 mr-1"></i> Keep both hands fully visible in good lighting. Gesture translation reads one hand at a time.</span>
                         <span id="model-mode-indicator" class="font-medium text-indigo-600 dark:text-indigo-400">MediaPipe Model Active</span>
                     </div>
                 </div>
@@ -759,9 +759,10 @@
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const landmarks = results.multiHandLandmarks[0];
                 
-                // Draw hand landmarks connection using MediaPipe drawing utils if available or custom
-                drawHand(landmarks);
-                document.getElementById('landmarks-status').innerText = 'Landmarks: Hand detected';
+                // Draw every detected hand; the gesture demo below reads the first hand.
+                results.multiHandLandmarks.forEach(handLandmarks => drawHand(handLandmarks));
+                const handCount = results.multiHandLandmarks.length;
+                document.getElementById('landmarks-status').innerText = `Landmarks: ${handCount} ${handCount === 1 ? 'hand' : 'hands'} detected`;
 
                 // Heuristic gesture classifier based on finger landmark coordinates
                 const detected = classifyGesture(landmarks);
