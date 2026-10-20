@@ -36,6 +36,14 @@ This repository contains a single-page static web app that uses MediaPipe Hands 
 
 3. Open the site in Chrome/Edge/Firefox at http://localhost:8080 and allow camera access.
 
+## Camera-supported shapes
+
+The camera demo recognizes A, B, D, F, I, L, U, V, W, Y, I LOVE YOU, and an OPEN PALM practice gesture. Use the camera sign guide for finger placement. Face either palm toward the camera, keep your whole hand visible, and hold a shape for 0.6 seconds to add it. Change shapes or lower your hand for at least 0.35 seconds before repeating the same sign.
+
+Recognition uses palm-relative distances and joint angles, with ambiguous shapes left unrecognized. Dictionary entries labeled “Dictionary guide only” (including C and movement signs such as Thank You) are learning references, not camera-supported translations. Open Palm is not a translation of Hello. These heuristic shapes are not a trained ASL interpreter.
+
+Run the automated camera and geometry checks with `node --test tests/hand-detection.test.cjs`. Synthetic landmark tests cover rule behavior; real webcam accuracy still depends on lighting, hand position, and camera quality.
+
 ## Install as PWA
 
 - When opened in a supported browser (Chrome/Edge on desktop or Android), you should see an "Install" option in the address bar or in the browser menu. Install will add SignBridge to your device and run it like a native app.

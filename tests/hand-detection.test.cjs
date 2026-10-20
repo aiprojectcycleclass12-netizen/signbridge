@@ -97,3 +97,68 @@ test('model loading failure does not open the camera or claim readiness', async 
     assert.equal(a.run('modelReady'), null);
     assert.match(a.element('ai-model-status').textContent, /unavailable/);
 });
+
+// Synthetic palm-facing landmarks exercise geometric invariance, not real-world accuracy.
+function shape(extended, thumb = false, spread = .12) {
+    const lm = Array.from({length: 21}, () => ({x: .5, y: .75}));
+    lm[0] = {x: .5, y: .9};
+    for (let f = 0; f < 4; f++) {
+        const base = 5 + f * 4;
+        const x = .35 + f * .1;
+        lm[base] = {x, y: .65};
+        lm[base+1] = {x, y: .5};
+        lm[base+2] = {x, y: extended[f] ? .38 : .62};
+        lm[base+3] = {x: x + (f === 1 && extended[f] ? spread - .1 : 0), y: extended[f] ? .25 : .75};
+    }
+    lm[1] = {x: .3, y: .8}; lm[2] = {x: .25, y: .7}; lm[3] = {x: .22, y: .6};
+    lm[4] = thumb ? {x: .1, y: .6} : {x: .42, y: .7};
+    return lm;
+}
+
+test('new shapes survive mirroring, rotation, and scaling', () => {
+    const a = app();
+    for (const [expected, fingers, thumb] of [
+        ['B', [1,1,1,1], false], ['OPEN PALM', [1,1,1,1], true],
+        ['L', [1,0,0,0], true], ['I', [0,0,0,1], false],
+        ['Y', [0,0,0,1], true], ['I LOVE YOU', [1,0,0,1], true],
+        ['W', [1,1,1,0], false], ['V', [1,1,0,0], false]
+    ]) {
+        const points = shape(fingers, thumb);
+        for (const transformed of [points, points.map(p => ({x: 1-p.x, y:p.y})),
+            points.map(p => ({x: .5 - (p.y-.5)*.75, y: .5 + (p.x-.5)*4/3})),
+            points.map(p => ({x: .2+p.x*.6, y:.2+p.y*.6}))]) {
+            assert.equal(a.run(`classifyGesture(${JSON.stringify(transformed)})`), expected);
+        }
+    }
+    assert.equal(a.run('classifyGesture([])'), 'UNKNOWN');
+    assert.equal(a.run('classifyGesture(Array.from({length:21},()=>({x:.5,y:.5})))'), 'UNKNOWN');
+});
+
+test('a held sign adds once and a deliberate release allows a repeat', async () => {
+    const a = app();
+    await a.run('toggleWebcam()');
+    a.run(`let testTime = 0; performance.now = () => testTime;
+        classifyGesture = () => 'L';
+        const result = {multiHandLandmarks: [Array.from({length:21},()=>({x:.5,y:.5}))]};
+        onHandResults(result); testTime=650; onHandResults(result);
+        testTime=2000; onHandResults(result);`);
+    assert.equal(a.run('translatedWords.join()'), 'L');
+    a.run(`testTime=2100; onHandResults({multiHandLandmarks:[]});
+        testTime=2500; onHandResults({multiHandLandmarks:[]});
+        testTime=2600; onHandResults(result); testTime=3300; onHandResults(result);`);
+    assert.equal(a.run('translatedWords.join()'), 'L,L');
+});
+
+
+test('A, D, F, and U have distinct geometric paths', () => {
+    const a = app();
+    const cases = [];
+    const fist = shape([0,0,0,0]); fist[4] = {x:.32,y:.67}; cases.push(['A', fist]);
+    cases.push(['D', shape([1,0,0,0])]);
+    cases.push(['U', shape([1,1,0,0], false, .03)]);
+    const pinch = shape([0,1,1,1]); pinch[8] = {...pinch[4]}; cases.push(['F', pinch]);
+    for (const [expected, points] of cases) {
+        assert.equal(a.run(`classifyGesture(${JSON.stringify(points)})`), expected);
+        assert.equal(a.run(`classifyGesture(${JSON.stringify(points.map(p => ({x:1-p.x,y:p.y})))})`), expected);
+    }
+});
