@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-function app({ failFrame = false, failModel = false } = {}) {
+function app({ failFrame = false, failModel = false, failCamera = false, noFrames = false } = {}) {
     const elements = new Map();
     let requests = 0;
     let stopped = 0;
@@ -12,16 +12,19 @@ function app({ failFrame = false, failModel = false } = {}) {
     const element = id => {
         if (!elements.has(id)) elements.set(id, {
             innerText: '', textContent: '', classList: { add() {}, remove() {} },
-            getContext: () => context2d, play: async () => {},
+            getContext: () => context2d, play: async () => { if (noFrames) throw Error("VideoTimeout"); },
+            addEventListener() {}, removeEventListener() {},
             videoWidth: 640, videoHeight: 480, readyState: 2
         });
         return elements.get(id);
     };
     const context = vm.createContext({
-        document: { getElementById: element }, window: {}, console: { error() {} },
+        document: { getElementById: element }, window: { isSecureContext: true }, setTimeout, clearTimeout, console: { error() {} },
         navigator: { mediaDevices: { getUserMedia: async () => {
             requests++;
-            return { getTracks: () => [{ stop() { stopped++; } }] };
+            if (failCamera) throw Object.assign(Error('denied'), { name: 'NotAllowedError' });
+            const track = { stop() { stopped++; }, readyState: 'live', addEventListener() {} };
+            return { getTracks: () => [track], getVideoTracks: () => [track] };
         } } },
         performance: { now: () => 1 }, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
         Hands: class {
@@ -81,19 +84,21 @@ test('both hands are drawn and the count follows two, one, and no hands', async 
     assert.match(a.element('landmarks-status').innerText, /Show your whole hand/);
 });
 
-test('processing failure releases the camera and exposes retry status', async () => {
+test('processing failure preserves the preview and exposes retry status', async () => {
     const a = app({ failFrame: true });
     await a.run('toggleWebcam()');
     await a.run('processCameraFrame()');
-    assert.equal(a.counts().stopped, 1);
-    assert.equal(a.run('webcamActive'), false);
-    assert.match(a.element('ai-model-status').textContent, /Restart the camera/);
+    assert.equal(a.counts().stopped, 0);
+    assert.equal(a.run('webcamActive'), true);
+    assert.match(a.element('ai-model-status').textContent, /Hand detection unavailable/);
 });
 
-test('model loading failure does not open the camera or claim readiness', async () => {
+test('model loading failure preserves a working camera preview', async () => {
     const a = app({ failModel: true });
     await a.run('toggleWebcam()');
-    assert.equal(a.counts().requests, 0);
+    assert.equal(a.counts().requests, 1);
+    assert.equal(a.run('webcamActive'), true);
+    assert.equal(a.counts().stopped, 0);
     assert.equal(a.run('modelReady'), null);
     assert.match(a.element('ai-model-status').textContent, /unavailable/);
 });
@@ -161,4 +166,31 @@ test('A, D, F, and U have distinct geometric paths', () => {
         assert.equal(a.run(`classifyGesture(${JSON.stringify(points)})`), expected);
         assert.equal(a.run(`classifyGesture(${JSON.stringify(points.map(p => ({x:1-p.x,y:p.y})))})`), expected);
     }
+});
+
+
+test('blocked camera access shows permission guidance without starting detection', async () => {
+    const a = app({ failCamera: true });
+    await a.run('toggleWebcam()');
+    assert.equal(a.run('webcamActive'), false);
+    assert.equal(a.run('modelReady'), null);
+    assert.match(a.element('ai-model-status').textContent, /Allow camera access/);
+});
+
+test('a camera without playable video is released and never reports live', async () => {
+    const a = app({ noFrames: true });
+    await a.run('toggleWebcam()');
+    assert.equal(a.run('webcamActive'), false);
+    assert.equal(a.counts().stopped, 1);
+    assert.match(a.element('ai-model-status').textContent, /no video arrived/);
+});
+
+test('camera opens before hand detection starts loading', async () => {
+    const a = app();
+    a.run(`initMediaPipeHands = async () => {
+        if (!webcamActive || !videoElement.srcObject) throw Error('Preview not started');
+    }`);
+    await a.run('toggleWebcam()');
+    assert.equal(a.run('webcamActive'), true);
+    assert.equal(a.element('landmarks-status').innerText, 'Landmarks: Scanning');
 });
