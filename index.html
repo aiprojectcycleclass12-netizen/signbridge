@@ -184,13 +184,20 @@
 
                     <!-- Quick tips footer -->
                     <div class="mt-3 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 px-1">
-                        <span><i class="fa-solid fa-circle-info text-indigo-500 mr-1"></i> Keep both hands fully visible in good lighting. Gesture translation reads one hand at a time.</span>
+                        <span><i class="fa-solid fa-circle-info text-indigo-500 mr-1"></i> Face your palm toward the camera in good light. Use either hand, keep it fully visible, and hold for 0.6 seconds.</span>
                         <span id="model-mode-indicator" class="font-medium text-indigo-600 dark:text-indigo-400">MediaPipe Model Active</span>
                     </div>
                 </div>
 
                 <!-- Translation & Speech Box -->
                 <div class="lg:col-span-5 flex flex-col space-y-4">
+                    <div class="glass-card rounded-2xl p-5 border border-slate-200 dark:border-slate-800">
+                        <label for="sign-guide" class="block font-bold text-sm mb-2">Camera sign guide</label>
+                        <select id="sign-guide" onchange="updateSignGuide()" class="w-full rounded-xl p-2 bg-slate-100 dark:bg-slate-800 text-sm border border-slate-200 dark:border-slate-700"></select>
+                        <p id="sign-guide-tip" class="text-sm text-slate-600 dark:text-slate-300 mt-3"></p>
+                        <p id="detection-hint" role="status" aria-live="polite" class="text-xs text-indigo-600 dark:text-indigo-400 mt-3">Start the camera, then show one hand.</p>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-3">Hand-shape demo, not a full ASL translator. Movement and body-position signs such as Thank You are dictionary guides only. Open Palm is a practice gesture.</p>
+                    </div>
                     <!-- Translated Text Card -->
                     <div class="glass-card rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-800 flex-grow flex flex-col">
                         <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-100 dark:border-slate-800">
@@ -205,7 +212,7 @@
 
                         <!-- Text display area -->
                         <div id="translation-text-box" class="w-full flex-grow bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700/80 rounded-xl p-4 text-lg font-medium tracking-wide text-slate-800 dark:text-slate-100 min-h-[120px] max-h-[180px] overflow-y-auto mb-4 flex items-center justify-center text-center">
-                            <span class="text-slate-400 dark:text-slate-500 text-sm italic">Waiting for sign gestures... Show 'A', 'B', 'C', 'HELLO', or 'THANK YOU'</span>
+                            <span class="text-slate-400 dark:text-slate-500 text-sm italic">Show a supported hand shape below and hold it steady.</span>
                         </div>
 
                         <!-- Action Buttons -->
@@ -554,6 +561,30 @@
             { sign: 'SORRY', title: 'Sorry', desc: 'Make a fist and rub in circular motion over chest.', icon: 'fa-solid fa-face-frown' }
         ];
 
+        const cameraSigns = [
+            ['A', 'Close four fingers into a fist. Rest your thumb beside the index finger.'],
+            ['B', 'Straighten all four fingers together. Fold your thumb across your palm.'],
+            ['D', 'Point your index finger up. Touch your thumb to the curled middle finger.'],
+            ['F', 'Touch index fingertip to thumb to make a circle. Extend the other three fingers.'],
+            ['I', 'Extend only your pinky. Fold your thumb across the other fingers.'],
+            ['L', 'Extend your index finger and thumb into an L. Curl the other fingers.'],
+            ['U', 'Extend index and middle fingers together. Curl ring and pinky; tuck your thumb.'],
+            ['V', 'Extend and spread index and middle fingers into a V. Tuck your thumb.'],
+            ['W', 'Extend and spread index, middle, and ring fingers. Curl pinky and tuck thumb.'],
+            ['Y', 'Extend thumb and pinky. Curl the three middle fingers.'],
+            ['I LOVE YOU', 'Extend thumb, index, and pinky. Curl middle and ring fingers.'],
+            ['OPEN PALM', 'Practice gesture: extend all fingers and spread your thumb away from your palm.']
+        ];
+        for (const [sign, desc] of cameraSigns) {
+            const existing = dictionaryData.find(item => item.sign === sign);
+            if (existing) existing.desc = desc;
+            else dictionaryData.push({sign, title: sign.length === 1 ? `Letter ${sign}` : sign, desc, icon: 'fa-solid fa-hand'});
+        }
+        function updateSignGuide() {
+            const sign = document.getElementById('sign-guide').value;
+            document.getElementById('sign-guide-tip').textContent = cameraSigns.find(item => item[0] === sign)?.[1] || cameraSigns[0][1];
+        }
+
         // --- Quiz Questions ---
         const quizQuestions = [
             { question: 'Show the sign for letter "A"', target: 'A', options: ['A', 'B', 'C', 'D'] },
@@ -565,6 +596,8 @@
 
         // --- Initialization on Load ---
         window.onload = function() {
+            document.getElementById('sign-guide').innerHTML = cameraSigns.map(([sign]) => `<option value="${sign}">${sign}</option>`).join('');
+            updateSignGuide();
             renderDictionary(dictionaryData);
             initQuiz();
             // Load the model when the camera is requested; failures can then be retried.
@@ -661,7 +694,9 @@
             document.getElementById('landmarks-status').innerText = 'Landmarks: Off';
             document.getElementById('fps-counter').innerText = 'FPS: 0';
             lastRecognizedSign = '';
-            signHoldCount = 0;
+            committedSign = '';
+            releasedAt = null;
+            signStartedAt = 0;
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
         }
 
@@ -744,7 +779,9 @@
 
         // --- Hand Tracking Results & Gesture Recognition ---
         let lastRecognizedSign = "";
-        let signHoldCount = 0;
+        let signStartedAt = 0;
+        let committedSign = '';
+        let releasedAt = null;
 
         function onHandResults(results) {
             if (!webcamActive) return;
@@ -768,62 +805,84 @@
                 const detected = classifyGesture(landmarks);
                 
                 if (detected !== "UNKNOWN") {
-                    document.getElementById('floating-gesture').innerText = detected;
-                    document.getElementById('floating-confidence').innerText = "Demo";
-
-                    // Debounce stable sign
-                    if (detected === lastRecognizedSign) {
-                        signHoldCount++;
-                        if (signHoldCount > 15) { // Stable for ~15 frames
-                            appendTranslatedWord(detected);
-                            signHoldCount = 0;
-                            lastRecognizedSign = ""; // reset to prevent duplicate spam
-                        }
-                    } else {
+                    releasedAt = null;
+                    const now = performance.now();
+                    if (detected !== lastRecognizedSign) {
                         lastRecognizedSign = detected;
-                        signHoldCount = 0;
+                        signStartedAt = now;
+                    }
+                    const progress = Math.min(1, (now - signStartedAt) / 600);
+                    document.getElementById('floating-gesture').innerText = detected;
+                    document.getElementById('floating-confidence').innerText = committedSign === detected ? 'Added' : `Hold ${Math.round(progress * 100)}%`;
+                    document.getElementById('detection-hint').textContent = committedSign === detected
+                        ? 'Added. Change signs, or lower your hand briefly to repeat this sign.'
+                        : `Seeing ${detected}. Hold steady to add it.`;
+                    if (progress === 1 && committedSign !== detected) {
+                        appendTranslatedWord(detected);
+                        committedSign = detected;
                     }
                 } else {
-                    lastRecognizedSign = '';
-                    signHoldCount = 0;
+                    releaseGesture();
                     document.getElementById('floating-gesture').innerText = "Hand detected";
                     document.getElementById('floating-confidence').innerText = "--";
+                    document.getElementById('detection-hint').textContent = 'Face your palm toward the camera and match a shape in the guide. Move back if fingertips are cut off.';
                 }
             } else {
-                lastRecognizedSign = '';
-                signHoldCount = 0;
+                releaseGesture();
                 document.getElementById('landmarks-status').innerText = 'Landmarks: Show your whole hand in good lighting';
                 document.getElementById('floating-gesture').innerText = "No Hand";
-                document.getElementById('floating-confidence').innerText = "0%";
+                document.getElementById('floating-confidence').innerText = "--";
+                document.getElementById('detection-hint').textContent = 'Show one whole hand, including your wrist, in even lighting.';
             }
             canvasCtx.restore();
         }
 
-        // Simple heuristic landmark classifier for demo signs ('A', 'B', 'C', 'HELLO', 'YES')
-        function classifyGesture(lm) {
-            // Check finger extension based on tip vs MCP joint y-coordinates
-            const thumbExtended = lm[4].x < lm[3].x;
-            const indexExtended = lm[8].y < lm[6].y;
-            const middleExtended = lm[12].y < lm[10].y;
-            const ringExtended = lm[16].y < lm[14].y;
-            const pinkyExtended = lm[20].y < lm[18].y;
+        function releaseGesture() {
+            lastRecognizedSign = '';
+            signStartedAt = 0;
+            if (releasedAt === null) releasedAt = performance.now();
+            // Brief tracking gaps should not add the same sign again.
+            if (performance.now() - releasedAt >= 350) committedSign = '';
+        }
 
-            // 'A' sign: Fist with thumb on side
-            if (!indexExtended && !middleExtended && !ringExtended && !pinkyExtended) {
-                return 'A';
+        // Palm-relative distances and joint angles work for either hand and in-plane rotation.
+        // These rules recognize static shapes only, not movement or full ASL grammar.
+        function classifyGesture(lm) {
+            if (!Array.isArray(lm) || lm.length !== 21 || lm.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) return 'UNKNOWN';
+            // Correct normalized coordinates for the video aspect ratio.
+            const aspect = (videoElement.videoWidth || 640) / (videoElement.videoHeight || 480);
+            const pts = lm.map(p => ({x: p.x * aspect, y: p.y}));
+            const dist = (a, b) => Math.hypot(pts[a].x - pts[b].x, pts[a].y - pts[b].y);
+            const palm = dist(0, 9);
+            if (palm < 0.025) return 'UNKNOWN';
+            const angle = (a, b, c) => {
+                const u = [pts[a].x - pts[b].x, pts[a].y - pts[b].y];
+                const v = [pts[c].x - pts[b].x, pts[c].y - pts[b].y];
+                const size = Math.hypot(...u) * Math.hypot(...v);
+                return size ? (u[0]*v[0] + u[1]*v[1]) / size : 1;
+            };
+            const fingers = [5, 9, 13, 17].map(base => {
+                if (angle(base, base+1, base+3) < -0.72 && dist(0, base+3) > dist(0, base+1) * 1.12) return 1;
+                if (dist(0, base+3) < dist(0, base+1) * 1.05 && angle(base, base+1, base+3) > -0.5) return 0;
+                return -1; // Ambiguous bends are not forced into a letter.
+            });
+            const thumb = dist(4, 5) / palm > 0.62 && dist(4, 17) / palm > 1.15;
+            const pattern = fingers.join(',');
+            if (dist(4, 8) / palm < 0.3 && fingers.slice(1).every(v => v === 1)) return 'F';
+            if (pattern === '1,1,1,1') return thumb ? 'OPEN PALM' : 'B';
+            if (pattern === '0,0,0,0' && !thumb && dist(4, 5) / palm < 0.65 && dist(4, 5) < dist(4, 9)) return 'A';
+            if (pattern === '1,0,0,0') {
+                if (thumb) return 'L';
+                if (dist(4, 12) / palm < 0.5) return 'D';
             }
-            // 'B' sign: All fingers upright, thumb folded
-            if (indexExtended && middleExtended && ringExtended && pinkyExtended && !thumbExtended) {
-                return 'B';
+            if (pattern === '0,0,0,1') return thumb ? 'Y' : 'I';
+            if (pattern === '1,0,0,1' && thumb) return 'I LOVE YOU';
+            if (pattern === '1,1,0,0' && !thumb) {
+                const spread = dist(8, 12) / palm;
+                if (spread > 0.45) return 'V';
+                if (spread < 0.3) return 'U';
             }
-            // 'C' sign: Curved fingers
-            if (!indexExtended && !middleExtended && !ringExtended && !pinkyExtended && thumbExtended && lm[4].x > lm[8].x) {
-                return 'C';
-            }
-            // 'HELLO' / Open hand: All fingers extended
-            if (indexExtended && middleExtended && ringExtended && pinkyExtended && thumbExtended) {
-                return 'HELLO';
-            }
+            if (pattern === '1,1,1,0' && !thumb) return 'W';
             return 'UNKNOWN';
         }
 
@@ -836,13 +895,15 @@
         function updateTranslationDisplay() {
             const box = document.getElementById('translation-text-box');
             if (translatedWords.length === 0) {
-                box.innerHTML = `<span class="text-slate-400 dark:text-slate-500 text-sm italic">Waiting for sign gestures... Show 'A', 'B', 'C', 'HELLO', or 'THANK YOU'</span>`;
+                box.innerHTML = `<span class="text-slate-400 dark:text-slate-500 text-sm italic">Show a supported hand shape below and hold it steady.</span>`;
             } else {
                 box.innerHTML = `<span class="text-indigo-600 dark:text-indigo-400 font-bold">${translatedWords.join(' ')}</span>`;
             }
         }
 
         function clearTranslation() {
+            committedSign = '';
+            lastRecognizedSign = '';
             translatedWords = [];
             updateTranslationDisplay();
         }
@@ -898,6 +959,7 @@
                             <i class="${item.icon}"></i>
                         </div>
                         <h4 class="font-bold text-base mb-1">${item.sign}</h4>
+                        <p class="text-xs text-indigo-600 dark:text-indigo-400 mb-2">${cameraSigns.some(([sign]) => sign === item.sign) ? 'Camera shape' : 'Dictionary guide only'}</p>
                         <p class="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2">${item.desc}</p>
                     </div>
                     <button onclick="previewSign('${item.sign}')" class="mt-3 w-full py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-600 hover:text-white text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition">
