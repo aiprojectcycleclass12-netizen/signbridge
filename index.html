@@ -13,8 +13,7 @@
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- MediaPipe Hands & Camera Utils -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
     <!-- Canvas Confetti for Quizzes & Lessons -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
@@ -531,7 +530,9 @@
         let canvasElement = document.getElementById('output-canvas');
         let canvasCtx = canvasElement.getContext('2d');
         let hands = null;
-        let camera = null;
+        let modelReady = null;
+        let cameraStarting = false;
+        let frameRequest = null;
         let translatedWords = [];
         let totalXP = 450;
         let currentQuizIndex = 0;
@@ -566,7 +567,7 @@
         window.onload = function() {
             renderDictionary(dictionaryData);
             initQuiz();
-            initMediaPipeHands();
+            // Load the model when the camera is requested; failures can then be retried.
         };
 
         // --- Tab Switching ---
@@ -612,75 +613,133 @@
         }
 
         // --- MediaPipe Hands Setup ---
-        function initMediaPipeHands() {
+        function setModelStatus(message, failed = false) {
+            const status = document.getElementById('ai-model-status');
+            status.textContent = message;
+            status.className = `inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold ${failed ? 'bg-red-100 text-red-800' : 'bg-indigo-100 text-indigo-800'}`;
+            document.getElementById('model-mode-indicator').textContent = message;
+        }
+
+        async function initMediaPipeHands() {
+            if (!modelReady) {
+                modelReady = (async () => {
+                    setModelStatus('Loading hand detection model…');
+                    hands = new Hands({
+                        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`
+                    });
+                    hands.setOptions({
+                        maxNumHands: 2,
+                        modelComplexity: 1,
+                        minDetectionConfidence: 0.5,
+                        minTrackingConfidence: 0.5
+                    });
+                    hands.onResults(onHandResults);
+                    await hands.initialize();
+                    setModelStatus('Hand detection model ready');
+                })();
+            }
             try {
-                hands = new Hands({
-                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-                });
-                hands.setOptions({
-                    maxNumHands: 1,
-                    modelComplexity: 1,
-                    minDetectionConfidence: 0.65,
-                    minTrackingConfidence: 0.65
-                });
-                hands.onResults(onHandResults);
-                document.getElementById('ai-model-status').innerHTML = `
-                    <span class="w-2 h-2 rounded-full bg-emerald-500 mr-2"></span>MediaPipe Model Ready
-                `;
-                document.getElementById('ai-model-status').className = "inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300 dark;border-emerald-700/50";
-            } catch (e) {
-                console.error("MediaPipe initialization error:", e);
-                document.getElementById('ai-model-status').innerHTML = `
-                    <span class="w-2 h-2 rounded-full bg-red-500 mr-2"></span>Model Load Failed
-                `;
+                await modelReady;
+            } catch (error) {
+                modelReady = null;
+                hands = null;
+                setModelStatus('Model failed to load. Check your connection and retry.', true);
+                throw error;
+            }
+        }
+
+        function stopWebcam() {
+            webcamActive = false;
+            cancelAnimationFrame(frameRequest);
+            if (videoElement.srcObject) {
+                videoElement.srcObject.getTracks().forEach(track => track.stop());
+                videoElement.srcObject = null;
+            }
+            document.getElementById('webcam-btn-text').innerText = 'Start Camera';
+            document.getElementById('camera-placeholder').classList.remove('hidden');
+            document.getElementById('live-prediction-badge').classList.add('hidden');
+            document.getElementById('landmarks-status').innerText = 'Landmarks: Off';
+            document.getElementById('fps-counter').innerText = 'FPS: 0';
+            lastRecognizedSign = '';
+            signHoldCount = 0;
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        }
+
+        // Process one frame at a time from the same stream shown in the preview.
+        async function processCameraFrame() {
+            if (!webcamActive) return;
+            try {
+                if (videoElement.readyState >= 2 && videoElement.videoWidth > 0) {
+                    const started = performance.now();
+                    await hands.send({ image: videoElement });
+                    document.getElementById('fps-counter').innerText = `FPS: ${Math.round(1000 / Math.max(1, performance.now() - started))}`;
+                }
+                if (webcamActive) frameRequest = requestAnimationFrame(processCameraFrame);
+            } catch (error) {
+                stopWebcam();
+                modelReady = null;
+                hands = null;
+                setModelStatus('Hand detection stopped. Restart the camera to retry.', true);
+                console.error('Hand detection failed:', error);
             }
         }
 
         // --- Webcam Controls ---
         async function toggleWebcam() {
-            const btnText = document.getElementById('webcam-btn-text');
-            const placeholder = document.getElementById('camera-placeholder');
-            const badge = document.getElementById('live-prediction-badge');
-            const landmarksStatus = document.getElementById('landmarks-status');
-
-            if (!webcamActive) {
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
-                    videoElement.srcObject = stream;
-                    videoElement.play();
-                    webcamActive = true;
-                    btnText.innerText = "Stop Camera";
-                    placeholder.classList.add('hidden');
-                    badge.classList.remove('hidden');
-                    landmarksStatus.innerText = "Landmarks: Active";
-
-                    // Start camera loop
-                    camera = new Camera(videoElement, {
-                        onFrame: async () => {
-                            if (webcamActive && hands) {
-                                await hands.send({ image: videoElement });
-                            }
-                        },
-                        width: 640,
-                        height: 480
-                    });
-                    camera.start();
-                } catch (err) {
-                    alert("Webcam access denied or unavailable. Please check permissions.");
-                    console.error(err);
-                }
-            } else {
-                webcamActive = false;
-                btnText.innerText = "Start Camera";
-                placeholder.classList.remove('hidden');
-                badge.classList.add('hidden');
-                landmarksStatus.innerText = "Landmarks: Off";
-                if (videoElement.srcObject) {
-                    let tracks = videoElement.srcObject.getTracks();
-                    tracks.forEach(track => track.stop());
-                }
-                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            if (cameraStarting) return;
+            if (webcamActive) {
+                stopWebcam();
+                return;
             }
+            cameraStarting = true;
+            document.getElementById('webcam-btn-text').innerText = 'Starting…';
+            try {
+                await initMediaPipeHands();
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+                    audio: false
+                });
+                videoElement.srcObject = stream;
+                await videoElement.play();
+                webcamActive = true;
+                document.getElementById('webcam-btn-text').innerText = 'Stop Camera';
+                document.getElementById('camera-placeholder').classList.add('hidden');
+                document.getElementById('live-prediction-badge').classList.remove('hidden');
+                document.getElementById('floating-gesture').innerText = 'Scanning…';
+                document.getElementById('floating-confidence').innerText = '--';
+                document.getElementById('landmarks-status').innerText = 'Landmarks: Scanning';
+                frameRequest = requestAnimationFrame(processCameraFrame);
+            } catch (error) {
+                stopWebcam();
+                setModelStatus(error.name === 'NotAllowedError'
+                    ? 'Camera permission denied. Allow camera access and retry.'
+                    : 'Camera or model unavailable. Check your connection and camera, then retry.', true);
+                console.error('Camera startup failed:', error);
+            } finally {
+                cameraStarting = false;
+            }
+        }
+
+        // Draw locally so detection does not depend on an extra drawing library.
+        function drawHand(landmarks) {
+            const connections = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],
+                [5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],
+                [13,17],[0,17],[17,18],[18,19],[19,20]];
+            const point = index => [landmarks[index].x * canvasElement.width, landmarks[index].y * canvasElement.height];
+            canvasCtx.strokeStyle = '#6366f1';
+            canvasCtx.lineWidth = 4;
+            for (const [start, end] of connections) {
+                canvasCtx.beginPath();
+                canvasCtx.moveTo(...point(start));
+                canvasCtx.lineTo(...point(end));
+                canvasCtx.stroke();
+            }
+            canvasCtx.fillStyle = '#a855f7';
+            landmarks.forEach((_, index) => {
+                canvasCtx.beginPath();
+                canvasCtx.arc(...point(index), 4, 0, Math.PI * 2);
+                canvasCtx.fill();
+            });
         }
 
         // --- Hand Tracking Results & Gesture Recognition ---
@@ -701,15 +760,15 @@
                 const landmarks = results.multiHandLandmarks[0];
                 
                 // Draw hand landmarks connection using MediaPipe drawing utils if available or custom
-                drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#6366f1', lineWidth: 4});
-                drawLandmarks(canvasCtx, landmarks, {color: '#a855f7', lineWidth: 2, radius: 4});
+                drawHand(landmarks);
+                document.getElementById('landmarks-status').innerText = 'Landmarks: Hand detected';
 
                 // Heuristic gesture classifier based on finger landmark coordinates
                 const detected = classifyGesture(landmarks);
                 
                 if (detected !== "UNKNOWN") {
                     document.getElementById('floating-gesture').innerText = detected;
-                    document.getElementById('floating-confidence').innerText = "94%";
+                    document.getElementById('floating-confidence').innerText = "Demo";
 
                     // Debounce stable sign
                     if (detected === lastRecognizedSign) {
@@ -724,10 +783,15 @@
                         signHoldCount = 0;
                     }
                 } else {
-                    document.getElementById('floating-gesture').innerText = "Scanning...";
+                    lastRecognizedSign = '';
+                    signHoldCount = 0;
+                    document.getElementById('floating-gesture').innerText = "Hand detected";
                     document.getElementById('floating-confidence').innerText = "--";
                 }
             } else {
+                lastRecognizedSign = '';
+                signHoldCount = 0;
+                document.getElementById('landmarks-status').innerText = 'Landmarks: Show your whole hand in good lighting';
                 document.getElementById('floating-gesture').innerText = "No Hand";
                 document.getElementById('floating-confidence').innerText = "0%";
             }
